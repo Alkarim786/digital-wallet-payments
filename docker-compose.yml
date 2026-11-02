@@ -1,0 +1,124 @@
+# One command: `docker compose up --build`  ->  dashboard http://localhost:3000, API gateway http://localhost:8080
+# Only the gateway and the dashboard are published; the services are reachable solely through the gateway.
+
+x-service: &service
+  restart: unless-stopped
+  mem_limit: 512m
+  depends_on:
+    postgres: {condition: service_healthy}
+
+x-env: &env
+  DB_USER: wallet
+  DB_PASSWORD: wallet
+  KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+  JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-me-0123456789}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: wallet
+      POSTGRES_PASSWORD: wallet
+      POSTGRES_DB: wallet
+    volumes:
+      - ./docker/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wallet -d notification"]
+      interval: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      retries: 30
+
+  kafka:
+    image: apache/kafka:3.9.1
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_HEAP_OPTS: -Xmx512m -Xms256m
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 5s
+      retries: 30
+
+  auth-service:
+    <<: *service
+    build: {context: ., args: {SERVICE: auth-service}}
+    image: wallet/auth-service
+    environment:
+      <<: *env
+      DB_URL: jdbc:postgresql://postgres:5432/auth
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@wallet.example}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin-password-1}
+
+  fraud-service:
+    restart: unless-stopped
+    mem_limit: 256m
+    build: {context: ., args: {SERVICE: fraud-service}}
+    image: wallet/fraud-service
+
+  wallet-service:
+    <<: *service
+    build: {context: ., args: {SERVICE: wallet-service}}
+    image: wallet/wallet-service
+    depends_on:
+      postgres: {condition: service_healthy}
+      kafka: {condition: service_healthy}
+    environment:
+      <<: *env
+      DB_URL: jdbc:postgresql://postgres:5432/wallet
+      FRAUD_URL: http://fraud-service:8083
+
+  notification-service:
+    <<: *service
+    build: {context: ., args: {SERVICE: notification-service}}
+    image: wallet/notification-service
+    depends_on:
+      postgres: {condition: service_healthy}
+      kafka: {condition: service_healthy}
+    environment:
+      <<: *env
+      DB_URL: jdbc:postgresql://postgres:5432/notification
+
+  gateway:
+    restart: unless-stopped
+    mem_limit: 512m
+    build: {context: ., args: {SERVICE: gateway}}
+    image: wallet/gateway
+    depends_on:
+      redis: {condition: service_healthy}
+      auth-service: {condition: service_started}
+      wallet-service: {condition: service_started}
+    environment:
+      JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-me-0123456789}
+      REDIS_HOST: redis
+      AUTH_URL: http://auth-service:8081
+      WALLET_URL: http://wallet-service:8082
+      NOTIFICATIONS_URL: http://notification-service:8084
+      RATE_LIMIT_REPLENISH: ${RATE_LIMIT_REPLENISH:-20}
+      RATE_LIMIT_BURST: ${RATE_LIMIT_BURST:-40}
+    ports: ["8080:8080"]
+
+  web:
+    build: ./frontend
+    image: wallet/web
+    depends_on: [gateway]
+    ports: ["3000:80"]
+
+volumes:
+  pgdata:

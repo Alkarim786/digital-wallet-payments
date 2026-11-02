@@ -1,0 +1,25 @@
+server:
+  port: ${PORT:8081}
+
+spring:
+  application:
+    name: auth-service
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/auth}
+    username: ${DB_USER:wallet}
+    password: ${DB_PASSWORD:wallet}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+wallet:
+  jwt:
+    secret: ${JWT_SECRET:dev-only-secret-change-me-0123456789}
+    ttl: ${JWT_TTL:PT1H}
+  admin:
+    # Bootstrap admin, created at startup if no user with this email exists. Leave blank to skip.
+    email: ${ADMIN_EMAIL:}
+    password: ${ADMIN_PASSWORD:}

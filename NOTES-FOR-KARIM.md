@@ -1,0 +1,26 @@
+# Notes for Karim: Project 19, Digital Wallet & Payments
+
+## Resume bullets (every number was measured on a 4-core laptop; see README for method)
+
+- Built a Spring Boot 3 / Java 21 payments platform (gateway, auth, wallet, fraud and notification microservices, Kafka, Redis, PostgreSQL, React) with a **double-entry ledger** whose invariants are enforced in the database (deferred constraint trigger, append-only entries, non-negative balance CHECK) and audited by an independent reconciliation endpoint.
+- Proved correctness under concurrency: 1,500 random concurrent transfers across 10 accounts and 16 simultaneous retries of one idempotent request conserve money exactly (0 drift, 0 unbalanced transactions); found and fixed a real Postgres deadlock caused by foreign-key `KEY SHARE` locks that ordered `FOR UPDATE` locking alone did not prevent.
+- Implemented idempotency keys, a transactional outbox to Kafka with an idempotent consumer, and a rule-based fraud engine with admin review; ledger sustained ~330 transfers/s at 16 workers (p95 91 ms) on a 4-core machine, and the benchmark exposed hot-account row contention (~60-70 transfers/s, multi-second p99) with a documented mitigation path.
+
+## Five likely interview questions
+
+1. **How do you guarantee a retried payment does not charge twice?** `Idempotency-Key` header; the key is claimed inside the transfer's DB transaction with `INSERT ... ON CONFLICT DO NOTHING` plus a request hash. A concurrent duplicate blocks on the unique index until the first commits, then reads and returns the stored response. Same key + different body = 422. Pointers: `TransferService.transfer`, `claimKey`, `sixteenConcurrentRetries...` test. Know why business errors roll the key back too (retryable after top-up).
+2. **How do you avoid deadlocks and overdrafts with concurrent transfers?** Lock both accounts `FOR UPDATE` in ascending id order, re-check the balance under the lock, plus a DB CHECK as a backstop. Tell the FK story: my first version deadlocked anyway because inserting the transaction row takes `FOR KEY SHARE` locks on the referenced accounts before the `FOR UPDATE`; the fix was lock-then-insert (`lockPair`, then `insertTxn`). Pointer: commit history / `LedgerIT.randomConcurrent...`.
+3. **Why double-entry and why integers?** Every movement is a DEBIT and a CREDIT summing to zero, so money can only move, never appear; the global sum of balances must be 0 (top-ups debit a system account). Floats cannot represent cents exactly. The cached `balance_minor` is derived; reconciliation proves it equals the sum of entries.
+4. **Explain the outbox pattern. Why not publish to Kafka in the request?** Dual-write problem: DB commit and Kafka send cannot be one atomic operation. Write the event row in the same DB transaction; a relay publishes it (`SKIP LOCKED`, at-least-once) and consumers dedupe by `eventId` (unique `(event_id,user_id)`). Pointers: `OutboxRelay`, `NotificationIT` duplicate-delivery test.
+5. **What are the gateway's responsibilities and its security pitfalls?** JWT verification, rate limiting (Redis token bucket, per-user key), routing. The pitfall: downstream services trust `X-User-Id`, so the gateway must strip client-supplied copies (unit-tested) and the services must not be reachable directly (compose only publishes the gateway). Also: limiter fails open if Redis is down; `X-Country` is spoofable and should come from edge GeoIP.
+
+Also likely: scaling hot accounts (sharded balances, batching), why fraud runs outside the transaction (and the velocity race that creates), isolation levels (READ COMMITTED + explicit row locks vs SERIALIZABLE retries), what you would change for multi-currency.
+
+## Understand before interviews: the trickiest code
+
+- **`TransferService.transfer`** is the whole story in order: replay fast-path -> compute fraud features and call fraud-service **outside** any lock -> one `TransactionTemplate` that claims the key, `lockPair`s accounts, inserts the txn, `postEntries`, writes the outbox row, stores the response. `HELD`/`DECLINED` write a transaction row but no entries.
+- **`V1__ledger.sql`**: the `CONSTRAINT TRIGGER ... DEFERRABLE INITIALLY DEFERRED` runs at COMMIT, per entry row, and checks the transaction's entries sum to zero; `forbid_entry_change` makes entries append-only. `LedgerIT.databaseRejectsAnUnbalancedLedgerTransactionAtCommit` demonstrates it.
+- **`JwtAuthFilter`** (order -100): strips `X-User-*` first on every request (even public paths), then verifies the token and sets trusted headers; runs before the rate limiter so the limiter can key on the verified user.
+- **Replay semantics**: stored response includes the HTTP status (201 or 422 for DECLINED) and the `Idempotent-Replay: true` header marks a replay. `INSUFFICIENT_FUNDS` is *not* stored (the transaction rolls back), so the same key works after a top-up.
+- **Benchmark honesty**: the in-network vs host-JVM columns differ because each transfer is ~15 round trips; hot-account runs show lock-convoy tail latency. Do not claim these as production throughput.
+- **Known limits to volunteer**: held transfers do not reserve funds (approval re-checks), fraud velocity can race, rate limiter fails open, USD only, no refresh tokens, services trust headers (needs network policy/mTLS in real deployment).

@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.5.16</version>
+    <relativePath/>
+  </parent>
+
+  <groupId>io.github.alkarim786.wallet</groupId>
+  <artifactId>digital-wallet-payments</artifactId>
+  <version>1.0.0</version>
+  <packaging>pom</packaging>
+  <name>digital-wallet-payments</name>
+
+  <modules>
+    <module>wallet-common</module>
+    <module>auth-service</module>
+    <module>wallet-service</module>
+    <module>fraud-service</module>
+    <module>notification-service</module>
+    <module>gateway</module>
+  </modules>
+
+  <properties>
+    <java.version>21</java.version>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <spring-cloud.version>2025.0.0</spring-cloud.version>
+    <jjwt.version>0.12.6</jjwt.version>
+    <!-- JUnit tag excluded by default; `-Pit` also runs the Testcontainers suites (needs Docker). -->
+    <excluded.test.groups>integration,benchmark</excluded.test.groups>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.springframework.cloud</groupId>
+        <artifactId>spring-cloud-dependencies</artifactId>
+        <version>${spring-cloud.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>io.github.alkarim786.wallet</groupId>
+        <artifactId>wallet-common</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.jsonwebtoken</groupId>
+        <artifactId>jjwt-api</artifactId>
+        <version>${jjwt.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.jsonwebtoken</groupId>
+        <artifactId>jjwt-impl</artifactId>
+        <version>${jjwt.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.jsonwebtoken</groupId>
+        <artifactId>jjwt-jackson</artifactId>
+        <version>${jjwt.version}</version>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <build>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-surefire-plugin</artifactId>
+          <configuration>
+            <includes>
+              <include>**/*Test.java</include>
+              <include>**/*IT.java</include>
+              <include>**/*Benchmark.java</include>
+            </includes>
+            <excludedGroups>${excluded.test.groups}</excludedGroups>
+            <trimStackTrace>false</trimStackTrace>
+          </configuration>
+        </plugin>
+        <plugin>
+          <groupId>org.springframework.boot</groupId>
+          <artifactId>spring-boot-maven-plugin</artifactId>
+          <configuration>
+            <classifier>exec</classifier>
+          </configuration>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+  </build>
+
+  <profiles>
+    <!-- Windows only: the JDK's NIO selector wake-up pipe uses an AF_UNIX socket in %TEMP%, which
+         fails on some machines ("Unable to establish loopback connection"). Point it elsewhere. -->
+    <profile>
+      <id>windows</id>
+      <activation><os><family>windows</family></os></activation>
+      <properties>
+        <argLine>-Djdk.net.unixdomain.tmpdir=${env.PUBLIC}</argLine>
+      </properties>
+    </profile>
+    <profile>
+      <id>it</id>
+      <properties>
+        <excluded.test.groups>benchmark</excluded.test.groups>
+      </properties>
+    </profile>
+    <profile>
+      <id>bench</id>
+      <properties>
+        <excluded.test.groups>none</excluded.test.groups>
+      </properties>
+    </profile>
+  </profiles>
+</project>

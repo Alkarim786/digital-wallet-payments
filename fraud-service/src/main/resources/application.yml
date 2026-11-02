@@ -1,0 +1,14 @@
+server:
+  port: ${PORT:8083}
+spring:
+  application:
+    name: fraud-service
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+fraud:
+  max-transfers-per-minute: ${FRAUD_MAX_PER_MINUTE:5}
+  large-amount-minor: ${FRAUD_LARGE_AMOUNT_MINOR:500000}
+  new-payee-amount-minor: ${FRAUD_NEW_PAYEE_AMOUNT_MINOR:100000}

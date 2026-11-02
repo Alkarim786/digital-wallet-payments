@@ -1,0 +1,12 @@
+{
+  "seconds_per_run": 15,
+  "accounts": 500,
+  "runs": [
+    {"scenario": "uniform random pairs over 500 accounts", "concurrency": 1, "completed": 588, "insufficient_funds": 0, "transfers_per_s": 39.2, "p50_ms": 24.25, "p95_ms": 36.83, "p99_ms": 48.59},
+    {"scenario": "uniform random pairs over 500 accounts", "concurrency": 16, "completed": 5002, "insufficient_funds": 0, "transfers_per_s": 333.5, "p50_ms": 42.77, "p95_ms": 90.76, "p99_ms": 120.20},
+    {"scenario": "uniform random pairs over 500 accounts", "concurrency": 64, "completed": 3738, "insufficient_funds": 0, "transfers_per_s": 249.2, "p50_ms": 211.03, "p95_ms": 569.35, "p99_ms": 837.79},
+    {"scenario": "hot account: every transfer credits ONE account", "concurrency": 16, "completed": 1107, "insufficient_funds": 0, "transfers_per_s": 71.8, "p50_ms": 41.03, "p95_ms": 1114.72, "p99_ms": 4526.76},
+    {"scenario": "hot account: every transfer credits ONE account", "concurrency": 64, "completed": 970, "insufficient_funds": 0, "transfers_per_s": 62.3, "p50_ms": 164.20, "p95_ms": 4173.51, "p99_ms": 7788.03}
+  ],
+  "conservation": {"total_before_minor": 500000000, "total_after_minor": 500000000, "sum_of_all_balances": 0, "accounts_with_drift": 0, "unbalanced_transactions": 0, "healthy": true}
+}

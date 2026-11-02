@@ -1,0 +1,9 @@
+target/
+node_modules/
+dist/
+.env
+*.log
+.idea/
+.vscode/
+*.iml
+.DS_Store
