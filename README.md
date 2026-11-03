@@ -7,9 +7,6 @@ A Spring Boot microservices wallet with a **double-entry ledger**, ACID transfer
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
 ![License](https://img.shields.io/badge/license-MIT-green)
 [![CI](https://github.com/Alkarim786/digital-wallet-payments/actions/workflows/ci.yml/badge.svg)](https://github.com/Alkarim786/digital-wallet-payments/actions/workflows/ci.yml)
-
-*Project 19 of Karim's 30 Days, 30 Projects series.*
-
 ## Problem
 
 Moving money is the canonical "must not be wrong" workload: a retried request must not pay twice, two concurrent payments must not overdraw an account, a crash must not create or destroy money, and every cent must be traceable. This project implements those guarantees on PostgreSQL and proves them with concurrency tests, a database-enforced ledger invariant, and an independent reconciliation audit.
